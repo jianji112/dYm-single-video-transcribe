@@ -11,7 +11,18 @@
 
 dYm is a desktop application that combines **watermark-free video downloading** with **AI-driven content analysis**. Built for content creators, social media managers, and researchers who need to efficiently collect, organize, and understand short-form video content at scale.
 
-[Repository](https://github.com/Everless321/dYm)
+[Current Repository](https://github.com/jianji112/dYm-single-video-transcribe)
+
+---
+
+## Project Origin
+
+This project is **modified from** [Everless321/dYm](https://github.com/Everless321/dYm).
+
+Thanks to the original author for open-sourcing the project and providing the solid download and analysis foundation that this edition builds on.
+
+Current maintained fork:
+- [jianji112/dYm-single-video-transcribe](https://github.com/jianji112/dYm-single-video-transcribe)
 
 ---
 
@@ -53,21 +64,36 @@ For image carousel posts (Douyin's photo mode), dYm sends the original images di
 
 ## Features
 
-- **User Management** — Add and manage Douyin creators, bulk refresh profiles
-- **Batch Download** — Concurrent watermark-free downloads with configurable limits and task tracking
-- **Smart Filtering** — Filter content by creator, AI-generated tags, category, and content level
+- **User Management** – Add and manage Douyin creators, bulk refresh profiles
+- **Batch Download** – Concurrent watermark-free downloads with configurable limits and task tracking
+- **Smart Filtering** – Filter content by creator, AI-generated tags, category, and content level
 - **Local Storage** — All data stored in a local SQLite database, fully under your control
-- **Clipboard Detection** — Auto-detect Douyin links from clipboard, one-click add
-- **System Tray** — Minimize to tray for background operation
+- **Clipboard Detection** – Auto-detect Douyin links from clipboard, one-click add
+- **System Tray** – Minimize to tray for background operation
+
+## Added in This Fork
+
+- **Single Video Download** – Add a single Douyin video directly from a short link, full link, `jingxuan` link, or mixed share text
+- **Clipboard Routing for Video Links** – Detect video links from the clipboard and route them into the single-video workflow instead of treating them as creator links
+- **Configurable Single-Video Author Handling** – Decide whether authors discovered through single-video downloads should be added to user management by default
+- **Audio Transcription** – Extract audio from downloaded videos and send it to SiliconFlow for speech-to-text
+- **Transcript Storage and Export** – Save transcription results both in the local database and as `transcript.txt`, with in-app viewing, copying, and export support
 
 ---
 
 ## Quick Start
 
-1. Download the installer from [Releases](https://github.com/Everless321/dYm/releases)
+1. Download the installer from [Releases](https://github.com/jianji112/dYm-single-video-transcribe/releases)
 2. Open dYm and configure your Douyin Cookie in Settings
 3. Paste a Douyin link or add a creator
 4. Download videos and enable AI analysis as needed
+
+## Configuration Tutorials
+
+Chinese screenshot tutorials are available here:
+
+- [Douyin Cookie Setup](README_CN.md#douyin-config-tutorial)
+- [Audio Transcription Setup](README_CN.md#transcription-config-tutorial)
 
 ---
 
@@ -87,15 +113,15 @@ For image carousel posts (Douyin's photo mode), dYm sends the original images di
 ### Run from Source
 
 ```bash
-git clone https://github.com/Everless321/dYm.git
-cd dYm
+git clone https://github.com/jianji112/dYm-single-video-transcribe.git
+cd dYm-single-video-transcribe
 npm install
 npm run dev
 ```
 
 ### Download Pre-built
 
-Go to [Releases](https://github.com/Everless321/dYm/releases) for installer packages.
+Go to [Releases](https://github.com/jianji112/dYm-single-video-transcribe/releases) for installer packages.
 
 ---
 

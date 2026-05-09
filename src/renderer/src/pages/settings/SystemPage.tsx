@@ -16,6 +16,10 @@ const CURRENT_REPO_URL = 'https://github.com/jianji112/dYm-single-video-transcri
 const CURRENT_REPO_NAME = 'jianji112/dYm-single-video-transcribe'
 const UPSTREAM_REPO_URL = 'https://github.com/Everless321/dYm'
 const UPSTREAM_REPO_NAME = 'Everless321/dYm'
+const DOUYIN_TUTORIAL_URL =
+  'https://github.com/jianji112/dYm-single-video-transcribe/blob/main/README_CN.md#douyin-config-tutorial'
+const TRANSCRIPTION_TUTORIAL_URL =
+  'https://github.com/jianji112/dYm-single-video-transcribe/blob/main/README_CN.md#transcription-config-tutorial'
 
 export default function SystemPage() {
   // Cookie
@@ -355,6 +359,16 @@ export default function SystemPage() {
                       保存 Cookie
                     </button>
                   </div>
+                  <div className="flex justify-end">
+                    <a
+                      href={DOUYIN_TUTORIAL_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-[#0A84FF] hover:underline"
+                    >
+                      查看抖音配置教程
+                    </a>
+                  </div>
                 </div>
               </div>
 
@@ -497,6 +511,14 @@ export default function SystemPage() {
                 <p className="mb-4 text-xs text-[#A1A1A6]">
                   使用 SiliconFlow 音频转写接口，结果写入数据库并同步生成 transcript.txt
                 </p>
+                <a
+                  href={TRANSCRIPTION_TUTORIAL_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mb-4 inline-block text-xs text-[#0A84FF] hover:underline"
+                >
+                  查看转写配置教程（GitHub）
+                </a>
 
                 <div className="space-y-4">
                   <div className="flex flex-col gap-2">
