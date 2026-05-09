@@ -1,0 +1,19 @@
+node_modules
+dist
+out
+.DS_Store
+.eslintcache
+*.log*
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+.ace-tool/
+
+# Build info
+*.tsbuildinfo
+
+# Downloaded data
+packages/server/data/
