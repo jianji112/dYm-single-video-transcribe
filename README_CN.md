@@ -87,7 +87,7 @@ dYm 是一款集 **抖音无水印下载**、**AI 内容分析** 与 **音频转
 
 请按素材文件名对应的顺序完成：
 
-1. 点开链接后注册用户
+1. 点开 [SiliconFlow 转写注册链接](https://cloud.siliconflow.cn/i/QhTuVb78) 后注册用户
 
 ![转写配置步骤 1](docs/tutorials/transcription-step-1-register.png)
 
