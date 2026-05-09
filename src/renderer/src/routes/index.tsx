@@ -2,6 +2,8 @@ import { createHashRouter, Navigate } from 'react-router-dom'
 import { AppLayout } from '@/components/AppLayout'
 import DashboardPage from '@/pages/DashboardPage'
 import HomePage from '@/pages/HomePage'
+import SingleVideoPage from '@/pages/SingleVideoPage'
+import TranscriptionPage from '@/pages/TranscriptionPage'
 import UsersPage from '@/pages/settings/UsersPage'
 import DownloadPage from '@/pages/settings/DownloadPage'
 import TaskDetailPage from '@/pages/settings/TaskDetailPage'
@@ -30,6 +32,14 @@ export const router = createHashRouter([
       {
         path: 'download',
         element: <DownloadPage />
+      },
+      {
+        path: 'single-video',
+        element: <SingleVideoPage />
+      },
+      {
+        path: 'transcriptions',
+        element: <TranscriptionPage />
       },
       {
         path: 'download/:id',

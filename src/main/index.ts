@@ -32,12 +32,14 @@ import {
   closeDatabase,
   initDatabase,
   getSetting,
+  SINGLE_VIDEO_ONLY_USER_REMARK,
   setSetting,
   getAllSettings,
   createUser,
   getAllUsers,
   getUserById,
   getUserBySecUid,
+  updateUser,
   deleteUser,
   setUserShowInHome,
   updateUserSettings,
@@ -69,6 +71,7 @@ import { fetchDouyinCookie, refreshDouyinCookieSilent, isCookieRefreshing } from
 import {
   initDouyinHandler,
   refreshDouyinHandler,
+  extractDouyinUrlFromText,
   fetchUserProfile,
   fetchUserProfileBySecUid,
   fetchVideoDetail,
@@ -118,6 +121,21 @@ import {
   startWebBrowserServer,
   stopWebBrowserServer
 } from './services/web-browser'
+import {
+  enqueueSingleVideoTask,
+  initSingleVideoQueue,
+  listSingleVideoTasks,
+  removeSingleVideoTask,
+  retrySingleVideoTask
+} from './services/single-video'
+import {
+  copyTranscription,
+  exportTranscription,
+  initTranscriptionQueue,
+  listTranscriptionPosts,
+  retryTranscription,
+  startTranscriptions
+} from './services/transcription'
 
 type AddUserPostDownload =
   | { status: 'downloading'; awemeId: string }
@@ -149,22 +167,9 @@ let clipboardCheckTimer: NodeJS.Timeout | null = null // 防抖计时器
 const LINK_COOLDOWN = 30000 // 同一链接30秒内不重复提示
 const DEBOUNCE_DELAY = 500 // 防抖延迟500ms
 
-// 抖音链接正则匹配
-const douyinLinkPatterns = [
-  /https?:\/\/v\.douyin\.com\/\S+/i,
-  /https?:\/\/www\.douyin\.com\/user\/\S+/i,
-  /https?:\/\/www\.douyin\.com\/video\/\S+/i,
-  /https?:\/\/www\.iesdouyin\.com\/share\/user\/\S+/i,
-  /https?:\/\/www\.iesdouyin\.com\/share\/video\/\S+/i
-]
-
 // 检测文本中是否包含抖音链接
 function extractDouyinLink(text: string): string | null {
-  for (const pattern of douyinLinkPatterns) {
-    const match = text.match(pattern)
-    if (match) return match[0]
-  }
-  return null
+  return extractDouyinUrlFromText(text)
 }
 
 function createTray(): void {
@@ -453,6 +458,8 @@ app.whenReady().then(async () => {
 
   // 初始化同步调度器
   initScheduler()
+  initTranscriptionQueue()
+  initSingleVideoQueue()
 
   // 注册更新 IPC handlers
   registerUpdaterHandlers()
@@ -492,14 +499,20 @@ app.whenReady().then(async () => {
   ipcMain.handle('douyin:parseUrl', (_event, url: string) => parseDouyinUrl(url))
 
   // User IPC handlers
-  ipcMain.handle('user:getAll', () => getAllUsers())
+  ipcMain.handle(
+    'user:getAll',
+    (_event, options?: { includeSingleVideoOnly?: boolean }) =>
+      getAllUsers(options?.includeSingleVideoOnly === true)
+  )
   ipcMain.handle('user:add', async (_event, url: string) => {
     console.log('[User:add] Input url:', url)
 
     const parseResult = await parseDouyinUrl(url)
     console.log('[User:add] Link type:', parseResult.type, 'id:', parseResult.id)
 
-    let userData: Record<string, unknown>
+    let dbUser: DbUser
+    let isNewUser = false
+    let userData: Record<string, unknown> | null = null
     let homepageUrl = url
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let awemeDataForDownload: any = null
@@ -560,29 +573,37 @@ app.whenReady().then(async () => {
 
     const secUidStr = userData.sec_uid as string
     const existing = getUserBySecUid(secUidStr)
+    const input = {
+      sec_uid: secUidStr,
+      uid: (userData.uid as string) || '',
+      nickname: (userData.nickname as string) || '',
+      signature: (userData.signature as string) || '',
+      avatar:
+        (userData.avatar_larger as { url_list?: string[] })?.url_list?.[0] ||
+        (userData.avatar_medium as { url_list?: string[] })?.url_list?.[0] ||
+        '',
+      short_id: (userData.short_id as string) || '',
+      unique_id: (userData.unique_id as string) || '',
+      following_count: (userData.following_count as number) || 0,
+      follower_count: (userData.follower_count as number) || 0,
+      total_favorited: (userData.total_favorited as number) || 0,
+      aweme_count: (userData.aweme_count as number) || 0,
+      homepage_url: homepageUrl
+    }
 
-    let dbUser: DbUser
-    let isNewUser = false
     if (existing) {
-      dbUser = existing
-    } else {
-      const input = {
-        sec_uid: secUidStr,
-        uid: (userData.uid as string) || '',
-        nickname: (userData.nickname as string) || '',
-        signature: (userData.signature as string) || '',
-        avatar:
-          (userData.avatar_larger as { url_list?: string[] })?.url_list?.[0] ||
-          (userData.avatar_medium as { url_list?: string[] })?.url_list?.[0] ||
-          '',
-        short_id: (userData.short_id as string) || '',
-        unique_id: (userData.unique_id as string) || '',
-        following_count: (userData.following_count as number) || 0,
-        follower_count: (userData.follower_count as number) || 0,
-        total_favorited: (userData.total_favorited as number) || 0,
-        aweme_count: (userData.aweme_count as number) || 0,
-        homepage_url: homepageUrl
+      const refreshed = updateUser(existing.id, input) || existing
+      if (existing.remark === SINGLE_VIDEO_ONLY_USER_REMARK) {
+        dbUser =
+          updateUserSettings(refreshed.id, {
+            remark: '',
+            show_in_home: true
+          }) || refreshed
+        isNewUser = true
+      } else {
+        dbUser = refreshed
       }
+    } else {
       console.log('[User:add] Creating user with:', JSON.stringify(input, null, 2))
       dbUser = createUser(input)
       isNewUser = true
@@ -860,7 +881,7 @@ app.whenReady().then(async () => {
       reason: string
     }[] = []
 
-    const users = getAllUsers()
+    const users = getAllUsers(true)
     for (const user of users) {
       const posts = getPostsByUserIdAll(user.id)
       for (const post of posts) {
@@ -1026,6 +1047,21 @@ app.whenReady().then(async () => {
   ipcMain.handle('analysis:getUnanalyzedCountByUser', () => getUnanalyzedPostsCountByUser())
   ipcMain.handle('analysis:getUserStats', () => getUserAnalysisStats())
   ipcMain.handle('analysis:getTotalStats', () => getTotalAnalysisStats())
+
+  ipcMain.handle('singleVideo:list', () => listSingleVideoTasks())
+  ipcMain.handle('singleVideo:enqueue', (_event, url: string) => enqueueSingleVideoTask(url))
+  ipcMain.handle('singleVideo:retry', (_event, id: number) => retrySingleVideoTask(id))
+  ipcMain.handle('singleVideo:remove', (_event, id: number) => removeSingleVideoTask(id))
+
+  ipcMain.handle('transcription:list', () => listTranscriptionPosts())
+  ipcMain.handle('transcription:start', (_event, postIds: number[]) => {
+    startTranscriptions(postIds)
+  })
+  ipcMain.handle('transcription:retry', (_event, postId: number) => {
+    retryTranscription(postId)
+  })
+  ipcMain.handle('transcription:copy', (_event, postId: number) => copyTranscription(postId))
+  ipcMain.handle('transcription:export', (_event, postId: number) => exportTranscription(postId))
 
   // Video IPC handlers
   ipcMain.handle('video:getDetail', async (_event, url: string) => {

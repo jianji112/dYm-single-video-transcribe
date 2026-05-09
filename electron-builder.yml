@@ -19,6 +19,12 @@ asarUnpack:
 win:
   executableName: dym
   forceCodeSigning: false
+  signAndEditExecutable: false
+publish:
+  provider: github
+  owner: jianji112
+  repo: dYm-single-video-transcribe
+  releaseType: release
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

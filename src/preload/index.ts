@@ -35,7 +35,8 @@ const douyinAPI = {
 }
 
 const userAPI = {
-  getAll: (): Promise<DbUser[]> => ipcRenderer.invoke('user:getAll'),
+  getAll: (options?: { includeSingleVideoOnly?: boolean }): Promise<DbUser[]> =>
+    ipcRenderer.invoke('user:getAll', options),
   add: (url: string): Promise<AddUserResult> => ipcRenderer.invoke('user:add', url),
   delete: (id: number, deleteFiles?: boolean): Promise<void> =>
     ipcRenderer.invoke('user:delete', id, deleteFiles),
@@ -171,6 +172,35 @@ const analysisAPI = {
   }
 }
 
+const singleVideoAPI = {
+  list: (): Promise<SingleVideoTask[]> => ipcRenderer.invoke('singleVideo:list'),
+  enqueue: (url: string): Promise<SingleVideoEnqueueResult> =>
+    ipcRenderer.invoke('singleVideo:enqueue', url),
+  retry: (id: number): Promise<SingleVideoTask> => ipcRenderer.invoke('singleVideo:retry', id),
+  remove: (id: number): Promise<void> => ipcRenderer.invoke('singleVideo:remove', id),
+  onProgress: (callback: (progress: SingleVideoProgress) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: SingleVideoProgress): void =>
+      callback(progress)
+    ipcRenderer.on('singleVideo:progress', handler)
+    return () => ipcRenderer.removeListener('singleVideo:progress', handler)
+  }
+}
+
+const transcriptionAPI = {
+  list: (): Promise<DbPost[]> => ipcRenderer.invoke('transcription:list'),
+  start: (postIds: number[]): Promise<void> => ipcRenderer.invoke('transcription:start', postIds),
+  retry: (postId: number): Promise<void> => ipcRenderer.invoke('transcription:retry', postId),
+  copy: (postId: number): Promise<string> => ipcRenderer.invoke('transcription:copy', postId),
+  export: (postId: number): Promise<string> =>
+    ipcRenderer.invoke('transcription:export', postId),
+  onProgress: (callback: (progress: TranscriptionProgress) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: TranscriptionProgress): void =>
+      callback(progress)
+    ipcRenderer.on('transcription:progress', handler)
+    return () => ipcRenderer.removeListener('transcription:progress', handler)
+  }
+}
+
 const videoAPI = {
   getDetail: (url: string): Promise<VideoInfo> => ipcRenderer.invoke('video:getDetail', url),
   downloadToFolder: (info: VideoInfo): Promise<void> =>
@@ -260,6 +290,8 @@ const api = {
   post: postAPI,
   grok: grokAPI,
   analysis: analysisAPI,
+  singleVideo: singleVideoAPI,
+  transcription: transcriptionAPI,
   video: videoAPI,
   system: systemAPI,
   updater: updaterAPI,

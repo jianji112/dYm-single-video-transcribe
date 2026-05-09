@@ -12,6 +12,11 @@ import {
   X
 } from 'lucide-react'
 
+const CURRENT_REPO_URL = 'https://github.com/jianji112/dYm-single-video-transcribe'
+const CURRENT_REPO_NAME = 'jianji112/dYm-single-video-transcribe'
+const UPSTREAM_REPO_URL = 'https://github.com/Everless321/dYm'
+const UPSTREAM_REPO_NAME = 'Everless321/dYm'
+
 export default function SystemPage() {
   // Cookie
   const [cookie, setCookie] = useState('')
@@ -28,6 +33,9 @@ export default function SystemPage() {
   const [videoDownloadConcurrency, setVideoDownloadConcurrency] = useState('3')
   const [convertToJpg, setConvertToJpg] = useState(false)
   const [downloadPostOnAddUser, setDownloadPostOnAddUser] = useState(true)
+  const [singleVideoAddUser, setSingleVideoAddUser] = useState(false)
+  const [singleVideoClipboardAction, setSingleVideoClipboardAction] = useState('confirm')
+  const [singleVideoAutoTranscribe, setSingleVideoAutoTranscribe] = useState(true)
   const originalDownloadPath = useRef('')
 
   // 迁移
@@ -43,6 +51,11 @@ export default function SystemPage() {
   const [analysisModel, setAnalysisModel] = useState('grok-4-fast')
   const [analysisSlices, setAnalysisSlices] = useState('4')
   const [analysisPrompt, setAnalysisPrompt] = useState('')
+  const [siliconflowApiKey, setSiliconflowApiKey] = useState('')
+  const [transcriptionApiUrl, setTranscriptionApiUrl] = useState(
+    'https://api.siliconflow.cn/v1/audio/transcriptions'
+  )
+  const [transcriptionModel, setTranscriptionModel] = useState('FunAudioLLM/SenseVoiceSmall')
 
   // 更新
   const [currentVersion, setCurrentVersion] = useState('')
@@ -86,11 +99,19 @@ export default function SystemPage() {
     setVideoDownloadConcurrency(settings.video_download_concurrency || '3')
     setConvertToJpg(settings.convert_images_to_jpg === 'true')
     setDownloadPostOnAddUser(settings.download_post_on_add_user !== 'false')
+    setSingleVideoAddUser(settings.single_video_add_user === 'true')
+    setSingleVideoClipboardAction(settings.single_video_clipboard_action || 'confirm')
+    setSingleVideoAutoTranscribe(settings.single_video_auto_transcribe !== 'false')
     setAnalysisConcurrency(settings.analysis_concurrency || '2')
     setAnalysisRpm(settings.analysis_rpm || '10')
     setAnalysisModel(settings.analysis_model || 'grok-4-fast')
     setAnalysisSlices(settings.analysis_slices || '4')
     setAnalysisPrompt(settings.analysis_prompt || '')
+    setSiliconflowApiKey(settings.siliconflow_api_key || '')
+    setTranscriptionApiUrl(
+      settings.transcription_api_url || 'https://api.siliconflow.cn/v1/audio/transcriptions'
+    )
+    setTranscriptionModel(settings.transcription_model || 'FunAudioLLM/SenseVoiceSmall')
   }
 
   // Cookie handlers
@@ -218,6 +239,23 @@ export default function SystemPage() {
       await window.api.settings.set('analysis_slices', analysisSlices)
       await window.api.settings.set('analysis_prompt', analysisPrompt)
       toast.success('分析设置已保存')
+    } catch {
+      toast.error('保存失败')
+    }
+  }
+
+  const handleSaveTranscription = async () => {
+    try {
+      await window.api.settings.set('single_video_add_user', singleVideoAddUser ? 'true' : 'false')
+      await window.api.settings.set('single_video_clipboard_action', singleVideoClipboardAction)
+      await window.api.settings.set(
+        'single_video_auto_transcribe',
+        singleVideoAutoTranscribe ? 'true' : 'false'
+      )
+      await window.api.settings.set('siliconflow_api_key', siliconflowApiKey)
+      await window.api.settings.set('transcription_api_url', transcriptionApiUrl)
+      await window.api.settings.set('transcription_model', transcriptionModel)
+      toast.success('单视频与转写设置已保存')
     } catch {
       toast.error('保存失败')
     }
@@ -372,6 +410,134 @@ export default function SystemPage() {
                       className="h-9 px-4 rounded-lg bg-[#0A84FF] text-sm text-white font-medium hover:bg-[#0060D5] transition-colors"
                     >
                       保存
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-[#6E6E73]">
+                单视频与转写
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-[#1D1D1F]">剪贴板识别与 SiliconFlow</h2>
+            </div>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <div className="rounded-2xl border border-[#E5E5E7] bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-base font-semibold text-[#1D1D1F]">单视频下载</h2>
+
+                <div className="divide-y divide-[#E5E5E7]">
+                  <div className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm text-[#1D1D1F]">单视频下载时自动加入用户管理</p>
+                      <p className="mt-1 text-xs text-[#A1A1A6]">
+                        关闭后作者仍会入库支撑作品和转写，但默认不显示在用户管理和批量下载列表中
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSingleVideoAddUser(!singleVideoAddUser)}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                        singleVideoAddUser ? 'bg-[#0A84FF]' : 'bg-[#D1D1D6]'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                          singleVideoAddUser ? 'translate-x-[22px]' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm text-[#1D1D1F]">剪贴板检测动作</p>
+                      <p className="mt-1 text-xs text-[#A1A1A6]">
+                        检测到抖音视频链接后，询问加入、直接入队或忽略
+                      </p>
+                    </div>
+                    <select
+                      value={singleVideoClipboardAction}
+                      onChange={(e) => setSingleVideoClipboardAction(e.target.value)}
+                      className="h-10 w-full rounded-lg border border-[#E5E5E7] bg-[#F5F5F7] px-3 text-sm text-[#1D1D1F] md:w-[200px]"
+                    >
+                      <option value="confirm">询问后加入</option>
+                      <option value="auto">直接入队</option>
+                      <option value="off">关闭检测</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm text-[#1D1D1F]">下载后自动转写</p>
+                      <p className="mt-1 text-xs text-[#A1A1A6]">
+                        仅对新的单视频任务生效，不自动补跑历史视频
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSingleVideoAutoTranscribe(!singleVideoAutoTranscribe)}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                        singleVideoAutoTranscribe ? 'bg-[#0A84FF]' : 'bg-[#D1D1D6]'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                          singleVideoAutoTranscribe ? 'translate-x-[22px]' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-[#E5E5E7] bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-base font-semibold text-[#1D1D1F]">音频转写接口</h2>
+                <p className="mb-4 text-xs text-[#A1A1A6]">
+                  使用 SiliconFlow 音频转写接口，结果写入数据库并同步生成 transcript.txt
+                </p>
+
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm text-[#1D1D1F]">API Key</label>
+                    <input
+                      type="password"
+                      value={siliconflowApiKey}
+                      onChange={(e) => setSiliconflowApiKey(e.target.value)}
+                      placeholder="sk-************************"
+                      className="h-10 rounded-lg border border-[#E5E5E7] bg-[#F5F5F7] px-3 font-mono text-sm text-[#1D1D1F] transition-colors focus:outline-none focus-visible:border-[#0A84FF] focus-visible:ring-2 focus-visible:ring-[#0A84FF]/20"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm text-[#1D1D1F]">转写地址</label>
+                    <input
+                      type="text"
+                      value={transcriptionApiUrl}
+                      onChange={(e) => setTranscriptionApiUrl(e.target.value)}
+                      placeholder="https://api.siliconflow.cn/v1/audio/transcriptions"
+                      className="h-10 rounded-lg border border-[#E5E5E7] bg-[#F5F5F7] px-3 font-mono text-sm text-[#1D1D1F] transition-colors focus:outline-none focus-visible:border-[#0A84FF] focus-visible:ring-2 focus-visible:ring-[#0A84FF]/20"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm text-[#1D1D1F]">模型名称</label>
+                    <input
+                      type="text"
+                      value={transcriptionModel}
+                      onChange={(e) => setTranscriptionModel(e.target.value)}
+                      placeholder="FunAudioLLM/SenseVoiceSmall"
+                      className="h-10 rounded-lg border border-[#E5E5E7] bg-[#F5F5F7] px-3 font-mono text-sm text-[#1D1D1F] transition-colors focus:outline-none focus-visible:border-[#0A84FF] focus-visible:ring-2 focus-visible:ring-[#0A84FF]/20"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleSaveTranscription}
+                      className="h-9 rounded-lg bg-[#0A84FF] px-4 text-sm font-medium text-white transition-colors hover:bg-[#0060D5]"
+                    >
+                      保存单视频与转写设置
                     </button>
                   </div>
                 </div>
@@ -659,17 +825,38 @@ export default function SystemPage() {
 
                   <div className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <p className="text-sm text-[#1D1D1F]">GitHub</p>
+                      <p className="text-sm text-[#1D1D1F]">当前项目仓库</p>
                       <p className="text-xs text-[#A1A1A6] mt-1">查看源代码和发布记录</p>
                     </div>
                     <a
-                      href="https://github.com/Everless321/dYm"
+                      href={CURRENT_REPO_URL}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-[#0A84FF] hover:underline"
                     >
-                      Everless321/dYm
+                      {CURRENT_REPO_NAME}
                     </a>
+                  </div>
+
+                  <div className="flex flex-col gap-3 py-4 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-sm text-[#1D1D1F]">项目声明</p>
+                      <p className="mt-1 text-xs text-[#A1A1A6]">
+                        本项目基于原始开源项目修改而来，保留原项目许可证与来源信息。
+                      </p>
+                    </div>
+                    <p className="text-sm text-[#1D1D1F]">
+                      由{' '}
+                      <a
+                        href={UPSTREAM_REPO_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#0A84FF] hover:underline"
+                      >
+                        {UPSTREAM_REPO_NAME}
+                      </a>{' '}
+                      修改而来
+                    </p>
                   </div>
 
                   <div className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">

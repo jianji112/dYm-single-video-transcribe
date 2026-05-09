@@ -105,8 +105,37 @@ declare global {
     error?: string
   }
 
+  interface SingleVideoTask {
+    id: number
+    source_url: string
+    aweme_id: string
+    sec_uid: string
+    nickname: string
+    desc: string
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    error: string | null
+    post_id: number | null
+    created_at: number
+    updated_at: number
+  }
+
+  interface SingleVideoEnqueueResult {
+    status: 'queued' | 'already-downloaded' | 'already-queued'
+    task?: SingleVideoTask
+    postId?: number
+  }
+
+  interface SingleVideoProgress {
+    taskId: number
+    awemeId: string
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    message: string
+    error?: string
+    postId?: number | null
+  }
+
   interface UserAPI {
-    getAll: () => Promise<DbUser[]>
+    getAll: (options?: { includeSingleVideoOnly?: boolean }) => Promise<DbUser[]>
     add: (url: string) => Promise<AddUserResult>
     delete: (id: number, deleteFiles?: boolean) => Promise<void>
     refresh: (id: number, url: string) => Promise<DbUser>
@@ -235,6 +264,10 @@ declare global {
     cover_path: string | null
     video_path: string | null
     music_path: string | null
+    transcription_status: 'pending' | 'processing' | 'completed' | 'failed' | null
+    transcription_text: string | null
+    transcription_error: string | null
+    transcribed_at: number | null
     downloaded_at: number
     analysis_tags: string | null
     analysis_category: string | null
@@ -337,6 +370,30 @@ declare global {
     getUserStats: () => Promise<UserAnalysisStats[]>
     getTotalStats: () => Promise<TotalAnalysisStats>
     onProgress: (callback: (progress: AnalysisProgress) => void) => () => void
+  }
+
+  interface SingleVideoAPI {
+    list: () => Promise<SingleVideoTask[]>
+    enqueue: (url: string) => Promise<SingleVideoEnqueueResult>
+    retry: (id: number) => Promise<SingleVideoTask>
+    remove: (id: number) => Promise<void>
+    onProgress: (callback: (progress: SingleVideoProgress) => void) => () => void
+  }
+
+  interface TranscriptionProgress {
+    postId: number
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    message: string
+    error?: string
+  }
+
+  interface TranscriptionAPI {
+    list: () => Promise<DbPost[]>
+    start: (postIds: number[]) => Promise<void>
+    retry: (postId: number) => Promise<void>
+    copy: (postId: number) => Promise<string>
+    export: (postId: number) => Promise<string>
+    onProgress: (callback: (progress: TranscriptionProgress) => void) => () => void
   }
 
   interface VideoInfo {
@@ -473,6 +530,8 @@ declare global {
     post: PostAPI
     grok: GrokAPI
     analysis: AnalysisAPI
+    singleVideo: SingleVideoAPI
+    transcription: TranscriptionAPI
     video: VideoAPI
     system: SystemAPI
     updater: UpdaterAPI

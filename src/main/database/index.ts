@@ -37,6 +37,8 @@ const DEFAULT_ANALYSIS_PROMPT = `你是视频内容分析助手。分析视频�
 
 let db: Database.Database | null = null
 
+export const SINGLE_VIDEO_ONLY_USER_REMARK = '__single_video_only__'
+
 export function getDatabase(): Database.Database {
   if (!db) {
     const dbPath = join(app.getPath('userData'), 'data.db')
@@ -190,6 +192,10 @@ export function initDatabase(): void {
       cover_path TEXT,
       video_path TEXT,
       music_path TEXT,
+      transcription_status TEXT DEFAULT 'pending',
+      transcription_text TEXT,
+      transcription_error TEXT,
+      transcribed_at INTEGER,
       downloaded_at INTEGER DEFAULT (strftime('%s', 'now')),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
@@ -216,11 +222,56 @@ export function initDatabase(): void {
   }
 
   // posts 表索引
+  const transcriptionColumns = [
+    {
+      name: 'transcription_status',
+      sql: "ALTER TABLE posts ADD COLUMN transcription_status TEXT DEFAULT 'pending'"
+    },
+    { name: 'transcription_text', sql: 'ALTER TABLE posts ADD COLUMN transcription_text TEXT' },
+    {
+      name: 'transcription_error',
+      sql: 'ALTER TABLE posts ADD COLUMN transcription_error TEXT'
+    },
+    { name: 'transcribed_at', sql: 'ALTER TABLE posts ADD COLUMN transcribed_at INTEGER' }
+  ]
+  for (const col of transcriptionColumns) {
+    try {
+      database.exec(col.sql)
+    } catch {
+      // 鍒楀凡瀛樺湪
+    }
+  }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS single_video_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_url TEXT NOT NULL,
+      aweme_id TEXT NOT NULL,
+      sec_uid TEXT NOT NULL,
+      nickname TEXT,
+      desc TEXT,
+      status TEXT DEFAULT 'pending',
+      error TEXT,
+      post_id INTEGER,
+      created_at INTEGER DEFAULT (strftime('%s', 'now')),
+      updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+    )
+  `)
+  database.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_single_video_tasks_aweme_id ON single_video_tasks(aweme_id)'
+  )
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_single_video_tasks_status_created ON single_video_tasks(status, created_at)'
+  )
+
   database.exec(`CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_posts_sec_uid ON posts(sec_uid)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_posts_create_time ON posts(create_time DESC)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_posts_analyzed_at ON posts(analyzed_at)`)
   database.exec(`CREATE INDEX IF NOT EXISTS idx_posts_downloaded_at ON posts(downloaded_at)`)
+  database.exec(
+    'CREATE INDEX IF NOT EXISTS idx_posts_transcription_status ON posts(transcription_status)'
+  )
 
   // 初始化默认设置
   const defaultSettings = [
@@ -235,7 +286,13 @@ export function initDatabase(): void {
     { key: 'analysis_rpm', value: '10' },
     { key: 'analysis_model', value: 'grok-4-fast' },
     { key: 'analysis_slices', value: '4' },
-    { key: 'analysis_prompt', value: DEFAULT_ANALYSIS_PROMPT }
+    { key: 'analysis_prompt', value: DEFAULT_ANALYSIS_PROMPT },
+    { key: 'single_video_add_user', value: 'false' },
+    { key: 'single_video_clipboard_action', value: 'confirm' },
+    { key: 'single_video_auto_transcribe', value: 'true' },
+    { key: 'siliconflow_api_key', value: '' },
+    { key: 'transcription_api_url', value: 'https://api.siliconflow.cn/v1/audio/transcriptions' },
+    { key: 'transcription_model', value: 'FunAudioLLM/SenseVoiceSmall' }
   ]
 
   const insertStmt = database.prepare(`
@@ -334,14 +391,16 @@ export interface CreateUserInput {
   total_favorited?: number
   aweme_count?: number
   homepage_url?: string
+  show_in_home?: boolean
+  remark?: string
 }
 
 export function createUser(input: CreateUserInput): DbUser {
   const database = getDatabase()
   const stmt = database.prepare(`
     INSERT INTO users (sec_uid, uid, nickname, signature, avatar, short_id, unique_id,
-      following_count, follower_count, total_favorited, aweme_count, homepage_url)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      following_count, follower_count, total_favorited, aweme_count, homepage_url, show_in_home, remark)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
   const result = stmt.run(
     input.sec_uid,
@@ -355,7 +414,9 @@ export function createUser(input: CreateUserInput): DbUser {
     input.follower_count || 0,
     input.total_favorited || 0,
     input.aweme_count || 0,
-    input.homepage_url || ''
+    input.homepage_url || '',
+    input.show_in_home === false ? 0 : 1,
+    input.remark || ''
   )
   return getUserById(result.lastInsertRowid as number)!
 }
@@ -370,19 +431,24 @@ export function getUserBySecUid(secUid: string): DbUser | undefined {
   return database.prepare('SELECT * FROM users WHERE sec_uid = ?').get(secUid) as DbUser | undefined
 }
 
-export function getAllUsers(): DbUser[] {
+export function getAllUsers(includeSingleVideoOnly = false): DbUser[] {
   const database = getDatabase()
-  // 动态统计 downloaded_count
-  return database
-    .prepare(
-      `
+  const whereClause = includeSingleVideoOnly ? '' : 'WHERE COALESCE(u.remark, \'\') != ?'
+  const stmt = database.prepare(
+    `
     SELECT u.*, COALESCE(p.cnt, 0) as downloaded_count
     FROM users u
     LEFT JOIN (SELECT user_id, COUNT(*) as cnt FROM posts GROUP BY user_id) p ON u.id = p.user_id
+    ${whereClause}
     ORDER BY u.created_at DESC
   `
-    )
-    .all() as DbUser[]
+  )
+
+  if (includeSingleVideoOnly) {
+    return stmt.all() as DbUser[]
+  }
+
+  return stmt.all(SINGLE_VIDEO_ONLY_USER_REMARK) as DbUser[]
 }
 
 export function updateUser(id: number, input: Partial<CreateUserInput>): DbUser | undefined {
@@ -732,6 +798,10 @@ export interface DbPost {
   analysis_scene: string | null
   analysis_content_level: number | null
   analyzed_at: number | null
+  transcription_status: 'pending' | 'processing' | 'completed' | 'failed' | null
+  transcription_text: string | null
+  transcription_error: string | null
+  transcribed_at: number | null
 }
 
 export interface CreatePostInput {
@@ -747,6 +817,28 @@ export interface CreatePostInput {
   cover_path?: string
   video_path?: string
   music_path?: string
+}
+
+export interface DbSingleVideoTask {
+  id: number
+  source_url: string
+  aweme_id: string
+  sec_uid: string
+  nickname: string
+  desc: string
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  error: string | null
+  post_id: number | null
+  created_at: number
+  updated_at: number
+}
+
+export interface CreateSingleVideoTaskInput {
+  source_url: string
+  aweme_id: string
+  sec_uid: string
+  nickname?: string
+  desc?: string
 }
 
 export function createPost(input: CreatePostInput): DbPost {
@@ -947,6 +1039,71 @@ export function deletePostsByUserId(userId: number): number {
 }
 
 // 分析相关函数
+export function createSingleVideoTask(input: CreateSingleVideoTaskInput): DbSingleVideoTask {
+  const database = getDatabase()
+  const stmt = database.prepare(`
+    INSERT INTO single_video_tasks (source_url, aweme_id, sec_uid, nickname, desc)
+    VALUES (?, ?, ?, ?, ?)
+  `)
+  const result = stmt.run(
+    input.source_url,
+    input.aweme_id,
+    input.sec_uid,
+    input.nickname || '',
+    input.desc || ''
+  )
+  return getSingleVideoTaskById(result.lastInsertRowid as number)!
+}
+
+export function getSingleVideoTaskById(id: number): DbSingleVideoTask | undefined {
+  const database = getDatabase()
+  return database.prepare('SELECT * FROM single_video_tasks WHERE id = ?').get(id) as
+    | DbSingleVideoTask
+    | undefined
+}
+
+export function getSingleVideoTaskByAwemeId(awemeId: string): DbSingleVideoTask | undefined {
+  const database = getDatabase()
+  return database.prepare('SELECT * FROM single_video_tasks WHERE aweme_id = ?').get(awemeId) as
+    | DbSingleVideoTask
+    | undefined
+}
+
+export function getAllSingleVideoTasks(): DbSingleVideoTask[] {
+  const database = getDatabase()
+  return database
+    .prepare('SELECT * FROM single_video_tasks ORDER BY created_at DESC, id DESC')
+    .all() as DbSingleVideoTask[]
+}
+
+export function updateSingleVideoTask(
+  id: number,
+  input: Partial<Omit<DbSingleVideoTask, 'id' | 'created_at' | 'updated_at'>>
+): DbSingleVideoTask | undefined {
+  const database = getDatabase()
+  const fields: string[] = []
+  const values: unknown[] = []
+
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) {
+      fields.push(`${key} = ?`)
+      values.push(value)
+    }
+  }
+
+  if (fields.length === 0) return getSingleVideoTaskById(id)
+
+  fields.push("updated_at = strftime('%s', 'now')")
+  values.push(id)
+  database.prepare(`UPDATE single_video_tasks SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+  return getSingleVideoTaskById(id)
+}
+
+export function deleteSingleVideoTask(id: number): void {
+  const database = getDatabase()
+  database.prepare('DELETE FROM single_video_tasks WHERE id = ?').run(id)
+}
+
 export interface AnalysisResult {
   tags: string[]
   category: string
@@ -1099,6 +1256,56 @@ export function updatePostAnalysis(id: number, result: AnalysisResult): void {
 }
 
 // 标准化路径前缀（确保尾部有 /）
+export function getTranscriptionPosts(): DbPost[] {
+  const database = getDatabase()
+  return database
+    .prepare(
+      `
+      SELECT *
+      FROM posts
+      WHERE aweme_type != 68
+      ORDER BY downloaded_at DESC, id DESC
+    `
+    )
+    .all() as DbPost[]
+}
+
+export function updatePostTranscriptionStatus(
+  id: number,
+  status: 'pending' | 'processing' | 'completed' | 'failed',
+  error?: string | null
+): void {
+  const database = getDatabase()
+  database
+    .prepare(
+      `
+      UPDATE posts SET
+        transcription_status = ?,
+        transcription_error = ?,
+        transcription_text = CASE WHEN ? = 'pending' THEN NULL ELSE transcription_text END,
+        transcribed_at = CASE WHEN ? = 'completed' THEN COALESCE(transcribed_at, strftime('%s', 'now')) ELSE transcribed_at END
+      WHERE id = ?
+    `
+    )
+    .run(status, error ?? null, status, status, id)
+}
+
+export function updatePostTranscriptionResult(id: number, text: string): void {
+  const database = getDatabase()
+  database
+    .prepare(
+      `
+      UPDATE posts SET
+        transcription_status = 'completed',
+        transcription_text = ?,
+        transcription_error = NULL,
+        transcribed_at = strftime('%s', 'now')
+      WHERE id = ?
+    `
+    )
+    .run(text, id)
+}
+
 function normalizeDirPrefix(p: string): string {
   return p.endsWith('/') ? p : p + '/'
 }
@@ -1162,7 +1369,9 @@ export interface DashboardOverview {
 
 export function getDashboardOverview(): DashboardOverview {
   const database = getDatabase()
-  const userRow = database.prepare('SELECT COUNT(*) as cnt FROM users').get() as { cnt: number }
+  const userRow = database
+    .prepare('SELECT COUNT(*) as cnt FROM users WHERE COALESCE(remark, \'\') != ?')
+    .get(SINGLE_VIDEO_ONLY_USER_REMARK) as { cnt: number }
   const postRow = database
     .prepare(
       `SELECT

@@ -125,7 +125,8 @@ export default function FilesPage() {
   const loadUsers = async () => {
     setLoading(true)
     try {
-      const allUsers = (await window.api.user.getAll()) ?? []
+      const allUsers =
+        (await window.api.user.getAll({ includeSingleVideoOnly: true })) ?? []
       const withSize: UserWithSize[] = await Promise.all(
         allUsers.map(async (u) => {
           const sizes = await window.api.files.getFileSizes(u.sec_uid)

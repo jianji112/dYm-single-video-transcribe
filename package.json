@@ -1,11 +1,11 @@
 {
   "name": "dym",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "description": "An Electron application with React and TypeScript",
   "license": "GPL-3.0",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "jianji112",
+  "homepage": "https://github.com/jianji112/dYm-single-video-transcribe",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

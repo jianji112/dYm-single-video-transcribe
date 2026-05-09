@@ -476,7 +476,7 @@ export function isTaskRunning(taskId: number): boolean {
 }
 
 export type SinglePostResult =
-  | { status: 'success'; folderPath: string }
+  | { status: 'success'; folderPath: string; postId: number }
   | { status: 'already-downloaded' }
   | { status: 'failed'; error: string }
 
@@ -535,7 +535,7 @@ export async function downloadSinglePost(
       await convertFolderImagesToJpg(folderPath)
     }
 
-    createPost({
+    const post = createPost({
       aweme_id: awemeId,
       user_id: user.id,
       sec_uid: user.sec_uid,
@@ -550,7 +550,7 @@ export async function downloadSinglePost(
       music_path: folderPath
     })
 
-    return { status: 'success', folderPath }
+    return { status: 'success', folderPath, postId: post.id }
   } catch (error) {
     console.error(`[Downloader] downloadSinglePost failed for ${awemeId}:`, error)
     cleanupFailedDownload(folderPath)

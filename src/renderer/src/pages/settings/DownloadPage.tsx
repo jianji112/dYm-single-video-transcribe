@@ -1,39 +1,45 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import {
-  Plus,
-  FileText,
-  Pencil,
-  Trash2,
-  Download,
-  Clock,
   CheckCircle2,
-  XCircle,
-  Loader2,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  Download,
+  FileText,
+  Link2,
+  Loader2,
+  Pencil,
+  Plus,
   Timer,
-  X
+  Trash2,
+  X,
+  XCircle
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog'
 
 const PAGE_SIZE = 10
 
 const statusConfig = {
   pending: { label: '待执行', icon: Clock, color: 'text-[#6E6E73]', bg: 'bg-[#F2F2F4]' },
   running: { label: '执行中', icon: Loader2, color: 'text-[#0A84FF]', bg: 'bg-[#E8F0FE]' },
-  completed: { label: '已完成', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
+  completed: {
+    label: '已完成',
+    icon: CheckCircle2,
+    color: 'text-green-600',
+    bg: 'bg-green-50'
+  },
   failed: { label: '失败', icon: XCircle, color: 'text-red-600', bg: 'bg-red-50' }
-}
+} as const
 
 export default function DownloadPage() {
   const navigate = useNavigate()
@@ -50,9 +56,13 @@ export default function DownloadPage() {
   const [loading, setLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
 
+  const [singleVideoOpen, setSingleVideoOpen] = useState(false)
+  const [singleVideoUrl, setSingleVideoUrl] = useState('')
+  const [singleVideoLoading, setSingleVideoLoading] = useState(false)
+
   useEffect(() => {
-    loadTasks()
-    loadUsers()
+    void loadTasks()
+    void loadUsers()
   }, [])
 
   const loadTasks = async () => {
@@ -65,7 +75,7 @@ export default function DownloadPage() {
     setUsers(data)
   }
 
-  const totalPages = Math.ceil(tasks.length / PAGE_SIZE)
+  const totalPages = Math.max(1, Math.ceil(tasks.length / PAGE_SIZE))
   const paginatedTasks = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE
     return tasks.slice(start, start + PAGE_SIZE)
@@ -73,15 +83,15 @@ export default function DownloadPage() {
 
   const generateTaskName = (userIds: number[]) => {
     if (userIds.length === 0) return ''
-    const selectedUsers = users.filter((u) => userIds.includes(u.id))
+    const selectedUsers = users.filter((user) => userIds.includes(user.id))
     const date = new Date().toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
     if (selectedUsers.length === 1) {
       return `${selectedUsers[0].nickname} - ${date}`
     }
-    return `${selectedUsers[0].nickname} 等${selectedUsers.length}人 - ${date}`
+    return `${selectedUsers[0].nickname} 等 ${selectedUsers.length} 个用户 - ${date}`
   }
 
-  const handleOpenAdd = () => {
+  const resetTaskForm = () => {
     setEditingTask(null)
     setTaskName('')
     setSelectedUserIds([])
@@ -89,13 +99,17 @@ export default function DownloadPage() {
     setAutoSync(false)
     setSyncCron('')
     setCronError('')
+  }
+
+  const handleOpenAdd = () => {
+    resetTaskForm()
     setOpen(true)
   }
 
   const handleOpenEdit = (task: DbTaskWithUsers) => {
     setEditingTask(task)
     setTaskName(task.name)
-    setSelectedUserIds(task.users.map((u) => u.id))
+    setSelectedUserIds(task.users.map((user) => user.id))
     setConcurrency(String(task.concurrency))
     setAutoSync(Boolean(task.auto_sync))
     setSyncCron(task.sync_cron || '')
@@ -117,16 +131,16 @@ export default function DownloadPage() {
     if (selectedUserIds.length === users.length) {
       setSelectedUserIds([])
       if (!editingTask) setTaskName('')
-    } else {
-      const allIds = users.map((u) => u.id)
-      setSelectedUserIds(allIds)
-      if (!editingTask) setTaskName(generateTaskName(allIds))
+      return
     }
+    const allIds = users.map((user) => user.id)
+    setSelectedUserIds(allIds)
+    if (!editingTask) setTaskName(generateTaskName(allIds))
   }
 
-  const validateCron = async (expression: string): Promise<boolean> => {
+  const validateCron = async (expression: string) => {
     if (!expression.trim()) return true
-    return await window.api.sync.validateCron(expression)
+    return window.api.sync.validateCron(expression)
   }
 
   const handleSave = async () => {
@@ -135,22 +149,22 @@ export default function DownloadPage() {
       return
     }
     if (selectedUserIds.length === 0) {
-      toast.error('请选择至少一个用户')
+      toast.error('请至少选择一个用户')
       return
     }
 
-    if (autoSync && syncCron) {
+    if (autoSync && syncCron.trim()) {
       const valid = await validateCron(syncCron)
       if (!valid) {
-        setCronError('无效的 cron 表达式')
-        toast.error('无效的 cron 表达式')
+        setCronError('Cron 表达式无效')
+        toast.error('Cron 表达式无效')
         return
       }
     }
 
     setLoading(true)
-    const concurrencyNum = parseInt(concurrency) || 3
     try {
+      const concurrencyNum = Math.max(1, parseInt(concurrency, 10) || 3)
       if (editingTask) {
         await window.api.task.update(editingTask.id, {
           name: taskName.trim(),
@@ -160,7 +174,7 @@ export default function DownloadPage() {
         })
         await window.api.task.updateUsers(editingTask.id, selectedUserIds)
         await window.api.task.updateSchedule(editingTask.id)
-        toast.success('任务已更新')
+        toast.success('下载任务已更新')
       } else {
         const newTask = await window.api.task.create({
           name: taskName.trim(),
@@ -170,12 +184,13 @@ export default function DownloadPage() {
           sync_cron: syncCron.trim()
         })
         await window.api.task.updateSchedule(newTask.id)
-        toast.success('任务已创建')
+        toast.success('下载任务已创建')
       }
       setOpen(false)
-      loadTasks()
+      resetTaskForm()
+      await loadTasks()
     } catch {
-      toast.error(editingTask ? '更新失败' : '创建失败')
+      toast.error(editingTask ? '更新任务失败' : '创建任务失败')
     } finally {
       setLoading(false)
     }
@@ -184,48 +199,83 @@ export default function DownloadPage() {
   const handleDelete = async (id: number) => {
     try {
       await window.api.task.delete(id)
-      toast.success('任务已删除')
-      loadTasks()
+      toast.success('下载任务已删除')
+      await loadTasks()
     } catch {
-      toast.error('删除失败')
+      toast.error('删除任务失败')
     }
   }
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleString('zh-CN', {
+  const handleOpenSingleVideo = () => {
+    setSingleVideoUrl('')
+    setSingleVideoOpen(true)
+  }
+
+  const handleAddSingleVideo = async () => {
+    if (!singleVideoUrl.trim()) {
+      toast.error('请输入视频链接或分享文案')
+      return
+    }
+
+    setSingleVideoLoading(true)
+    try {
+      const result = await window.api.singleVideo.enqueue(singleVideoUrl.trim())
+      if (result.status === 'queued') {
+        toast.success('已加入单视频下载队列')
+      } else if (result.status === 'already-downloaded') {
+        toast.info('该作品已经下载过了')
+      } else {
+        toast.info('该作品已经在下载队列中')
+      }
+      setSingleVideoOpen(false)
+      setSingleVideoUrl('')
+      navigate('/single-video')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '添加单视频下载失败')
+    } finally {
+      setSingleVideoLoading(false)
+    }
+  }
+
+  const formatDate = (timestamp: number) =>
+    new Date(timestamp * 1000).toLocaleString('zh-CN', {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
       minute: '2-digit'
     })
-  }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Header */}
       <header className="h-16 flex items-center justify-between px-6 border-b border-[#E5E5E7] bg-white">
-        <h1 className="text-xl font-semibold text-[#1D1D1F]">视频下载</h1>
-        <Button onClick={handleOpenAdd} className="bg-[#0A84FF] hover:bg-[#0A84FF]/90 text-white">
-          <Plus className="h-4 w-4 mr-2" />
-          添加任务
-        </Button>
+        <h1 className="text-xl font-semibold text-[#1D1D1F]">下载任务</h1>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={handleOpenSingleVideo}
+            className="border-[#E5E5E7] text-[#1D1D1F]"
+          >
+            <Link2 className="mr-2 h-4 w-4" />
+            添加单视频下载
+          </Button>
+          <Button onClick={handleOpenAdd} className="bg-[#0A84FF] hover:bg-[#0A84FF]/90 text-white">
+            <Plus className="mr-2 h-4 w-4" />
+            添加任务
+          </Button>
+        </div>
       </header>
 
-      {/* Content */}
       <div className="flex-1 overflow-auto px-6 py-8">
         <div className="mx-auto max-w-6xl space-y-6">
-          {/* Task List Card */}
-          <div className="bg-white rounded-2xl border border-[#E5E5E7] shadow-sm overflow-hidden">
-            {/* List Header */}
-            <div className="h-14 flex items-center justify-between px-5 border-b border-[#E5E5E7]">
+          <div className="overflow-hidden rounded-2xl border border-[#E5E5E7] bg-white shadow-sm">
+            <div className="flex h-14 items-center justify-between border-b border-[#E5E5E7] px-5">
               <div className="flex items-center gap-3">
                 <span className="text-base font-semibold text-[#1D1D1F]">任务列表</span>
                 <span className="text-[13px] text-[#A1A1A6]">({tasks.length})</span>
               </div>
             </div>
 
-            {/* Table Header */}
-            <div className="h-12 flex items-center px-5 bg-[#F5F5F7] text-[12px] font-semibold text-[#6E6E73] uppercase tracking-wide">
+            <div className="flex h-12 items-center bg-[#F5F5F7] px-5 text-[12px] font-semibold uppercase tracking-wide text-[#6E6E73]">
               <div className="w-[260px]">任务名称</div>
               <div className="flex-1">用户</div>
               <div className="w-24 text-center">状态</div>
@@ -234,14 +284,15 @@ export default function DownloadPage() {
               <div className="w-32 text-right">操作</div>
             </div>
 
-            {/* Table Body */}
             {paginatedTasks.length === 0 ? (
-              <div className="py-20 flex flex-col items-center justify-center text-[#6E6E73]">
-                <div className="h-16 w-16 rounded-full bg-[#F2F2F4] flex items-center justify-center mb-4">
+              <div className="flex flex-col items-center justify-center py-20 text-[#6E6E73]">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#F2F2F4]">
                   <Download className="h-8 w-8 text-[#A1A1A6]" />
                 </div>
-                <p className="text-base font-medium">暂无任务</p>
-                <p className="text-sm mt-1 text-[#A1A1A6]">点击上方"添加任务"按钮开始</p>
+                <p className="text-base font-medium">暂无下载任务</p>
+                <p className="mt-1 text-sm text-[#A1A1A6]">
+                  可以创建批量下载任务，或直接添加单视频下载。
+                </p>
               </div>
             ) : (
               paginatedTasks.map((task) => {
@@ -250,18 +301,19 @@ export default function DownloadPage() {
                 return (
                   <div
                     key={task.id}
-                    className="h-[68px] flex items-center px-5 border-b border-[#E5E5E7] hover:bg-[#F2F2F4]/50 transition-colors group"
+                    className="group flex h-[68px] items-center border-b border-[#E5E5E7] px-5 transition-colors hover:bg-[#F2F2F4]/50"
                   >
-                    <div className="w-[260px] flex items-center gap-3">
+                    <div className="flex w-[260px] items-center gap-3">
                       <FileText className="h-5 w-5 text-[#A1A1A6]" />
-                      <span className="font-medium text-[#1D1D1F] truncate">{task.name}</span>
+                      <span className="truncate font-medium text-[#1D1D1F]">{task.name}</span>
                     </div>
-                    <div className="flex-1 flex items-center gap-2">
+
+                    <div className="flex flex-1 items-center gap-2">
                       <div className="flex -space-x-2">
                         {task.users.slice(0, 3).map((user) => (
                           <Avatar key={user.id} className="h-7 w-7 border-2 border-white">
                             <AvatarImage src={user.avatar} />
-                            <AvatarFallback className="text-xs bg-[#E8F0FE] text-[#0A84FF]">
+                            <AvatarFallback className="bg-[#E8F0FE] text-xs text-[#0A84FF]">
                               {user.nickname?.charAt(0) || 'U'}
                             </AvatarFallback>
                           </Avatar>
@@ -270,36 +322,40 @@ export default function DownloadPage() {
                       {task.users.length > 3 && (
                         <span className="text-xs text-[#A1A1A6]">+{task.users.length - 3}</span>
                       )}
-                      <span className="text-sm text-[#6E6E73] ml-1">{task.users.length} 人</span>
+                      <span className="ml-1 text-sm text-[#6E6E73]">{task.users.length} 个用户</span>
                     </div>
-                    <div className="w-24 flex justify-center">
-                      <Badge className={`gap-1 ${status.bg} ${status.color} border-0`}>
+
+                    <div className="flex w-24 justify-center">
+                      <Badge className={`gap-1 border-0 ${status.bg} ${status.color}`}>
                         <StatusIcon
                           className={`h-3 w-3 ${task.status === 'running' ? 'animate-spin' : ''}`}
                         />
                         {status.label}
                       </Badge>
                     </div>
-                    <div className="w-32 flex flex-col items-center gap-0.5">
+
+                    <div className="flex w-32 flex-col items-center gap-0.5">
                       {task.auto_sync && task.sync_cron ? (
                         <>
                           <Badge
                             variant="outline"
-                            className="gap-1 text-xs border-green-500 text-green-600"
+                            className="gap-1 border-green-500 text-xs text-green-600"
                           >
                             <Timer className="h-3 w-3" />
                             已开启
                           </Badge>
-                          <span className="text-xs text-[#A1A1A6] font-mono">{task.sync_cron}</span>
+                          <span className="font-mono text-xs text-[#A1A1A6]">{task.sync_cron}</span>
                         </>
                       ) : (
                         <span className="text-xs text-[#A1A1A6]">未设置</span>
                       )}
                     </div>
+
                     <div className="w-32 text-center text-sm text-[#6E6E73]">
                       {formatDate(task.created_at)}
                     </div>
-                    <div className="w-32 flex justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+
+                    <div className="flex w-32 justify-end gap-1 opacity-60 transition-opacity group-hover:opacity-100">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -321,7 +377,7 @@ export default function DownloadPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-[#6E6E73] hover:text-[#0A84FF]"
+                        className="h-8 w-8 text-[#6E6E73] hover:text-red-500"
                         onClick={() => handleDelete(task.id)}
                         title="删除任务"
                       >
@@ -333,9 +389,8 @@ export default function DownloadPage() {
               })
             )}
 
-            {/* Pagination */}
             {tasks.length > PAGE_SIZE && (
-              <div className="h-14 flex items-center justify-between px-5 border-t border-[#E5E5E7]">
+              <div className="flex h-14 items-center justify-between border-t border-[#E5E5E7] px-5">
                 <span className="text-sm text-[#6E6E73]">
                   第 {currentPage} / {totalPages} 页，共 {tasks.length} 条
                 </span>
@@ -343,7 +398,7 @@ export default function DownloadPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                     disabled={currentPage === 1}
                     className="border-[#E5E5E7]"
                   >
@@ -353,7 +408,7 @@ export default function DownloadPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                     disabled={currentPage === totalPages}
                     className="border-[#E5E5E7]"
                   >
@@ -367,29 +422,87 @@ export default function DownloadPage() {
         </div>
       </div>
 
-      {/* Add/Edit Task Dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden" showCloseButton={false}>
-          <div className="h-[60px] flex items-center justify-between px-6 border-b border-[#E5E5E7]">
-            <h2 className="text-lg font-semibold text-[#1D1D1F]">
-              {editingTask ? '编辑任务' : '添加下载任务'}
-            </h2>
+      <Dialog open={singleVideoOpen} onOpenChange={setSingleVideoOpen}>
+        <DialogContent className="overflow-hidden p-0 sm:max-w-[520px]" showCloseButton={false}>
+          <div className="flex h-[60px] items-center justify-between border-b border-[#E5E5E7] px-6">
+            <h2 className="text-lg font-semibold text-[#1D1D1F]">添加单视频下载</h2>
             <button
-              onClick={() => setOpen(false)}
-              className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-[#F2F2F4] transition-colors"
+              onClick={() => setSingleVideoOpen(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[#F2F2F4]"
             >
               <X className="h-5 w-5 text-[#A1A1A6]" />
             </button>
           </div>
 
-          <div className="p-6 space-y-5">
+          <div className="space-y-4 p-6">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-[#1D1D1F]">视频链接或分享文案</Label>
+              <textarea
+                value={singleVideoUrl}
+                onChange={(event) => setSingleVideoUrl(event.target.value)}
+                placeholder="粘贴 douyin 链接，或整段分享文案"
+                disabled={singleVideoLoading}
+                rows={5}
+                className="w-full resize-none rounded-lg border border-[#E5E5E7] bg-[#F5F5F7] px-3 py-3 text-sm text-[#1D1D1F] transition-colors focus:outline-none focus-visible:border-[#0A84FF] focus-visible:ring-2 focus-visible:ring-[#0A84FF]/20"
+              />
+            </div>
+            <p className="text-xs text-[#A1A1A6]">
+              支持短链、作品直链、精选页链接，以及包含链接的抖音分享文案。
+            </p>
+          </div>
+
+          <DialogFooter className="flex h-[72px] items-center justify-end gap-3 border-t border-[#E5E5E7] px-6">
+            <Button
+              variant="outline"
+              onClick={() => setSingleVideoOpen(false)}
+              disabled={singleVideoLoading}
+              className="h-10 border-[#E5E5E7] px-5"
+            >
+              取消
+            </Button>
+            <Button
+              onClick={handleAddSingleVideo}
+              disabled={singleVideoLoading || !singleVideoUrl.trim()}
+              className="h-10 bg-[#0A84FF] px-5 text-white hover:bg-[#0A84FF]/90"
+            >
+              {singleVideoLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  添加中...
+                </>
+              ) : (
+                <>
+                  <Link2 className="mr-2 h-4 w-4" />
+                  加入队列
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="overflow-hidden p-0 sm:max-w-[520px]" showCloseButton={false}>
+          <div className="flex h-[60px] items-center justify-between border-b border-[#E5E5E7] px-6">
+            <h2 className="text-lg font-semibold text-[#1D1D1F]">
+              {editingTask ? '编辑下载任务' : '添加下载任务'}
+            </h2>
+            <button
+              onClick={() => setOpen(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[#F2F2F4]"
+            >
+              <X className="h-5 w-5 text-[#A1A1A6]" />
+            </button>
+          </div>
+
+          <div className="space-y-5 p-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-[#1D1D1F]">任务名称</Label>
                 <Input
                   value={taskName}
-                  onChange={(e) => setTaskName(e.target.value)}
-                  placeholder="输入任务名称..."
+                  onChange={(event) => setTaskName(event.target.value)}
+                  placeholder="输入任务名称"
                   disabled={loading}
                   className="h-10 border-[#E5E5E7]"
                 />
@@ -401,7 +514,7 @@ export default function DownloadPage() {
                   min="1"
                   max="10"
                   value={concurrency}
-                  onChange={(e) => setConcurrency(e.target.value)}
+                  onChange={(event) => setConcurrency(event.target.value)}
                   placeholder="3"
                   disabled={loading}
                   className="h-10 border-[#E5E5E7]"
@@ -424,17 +537,17 @@ export default function DownloadPage() {
                 </Button>
               </div>
               <ScrollArea className="h-48 rounded-lg border border-[#E5E5E7]">
-                <div className="p-2 space-y-1">
+                <div className="space-y-1 p-2">
                   {users.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-[#6E6E73]">
                       <p className="text-sm">暂无用户</p>
-                      <p className="text-xs mt-1 text-[#A1A1A6]">请先在用户管理中添加用户</p>
+                      <p className="mt-1 text-xs text-[#A1A1A6]">请先在用户管理中添加用户</p>
                     </div>
                   ) : (
                     users.map((user) => (
                       <div
                         key={user.id}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#F2F2F4] transition-colors cursor-pointer"
+                        className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition-colors hover:bg-[#F2F2F4]"
                         onClick={() => handleUserToggle(user.id)}
                       >
                         <Checkbox
@@ -448,11 +561,11 @@ export default function DownloadPage() {
                             {user.nickname?.charAt(0) || 'U'}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-[#1D1D1F] truncate text-sm">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-[#1D1D1F]">
                             {user.nickname}
                           </p>
-                          <p className="text-xs text-[#A1A1A6]">{user.aweme_count} 个视频</p>
+                          <p className="text-xs text-[#A1A1A6]">{user.aweme_count} 个作品</p>
                         </div>
                       </div>
                     ))
@@ -462,21 +575,21 @@ export default function DownloadPage() {
               <p className="text-xs text-[#A1A1A6]">已选择 {selectedUserIds.length} 个用户</p>
             </div>
 
-            <div className="p-4 rounded-lg border border-[#E5E5E7] bg-[#F2F2F4]/50 space-y-4">
+            <div className="space-y-4 rounded-lg border border-[#E5E5E7] bg-[#F2F2F4]/50 p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-medium text-[#1D1D1F]">定时同步</Label>
-                  <p className="text-xs text-[#A1A1A6]">按设定时间自动执行下载任务</p>
+                  <p className="text-xs text-[#A1A1A6]">按计划自动执行这个下载任务</p>
                 </div>
                 <Switch checked={autoSync} onCheckedChange={setAutoSync} disabled={loading} />
               </div>
               {autoSync && (
-                <div className="space-y-2 pt-3 border-t border-[#E5E5E7]">
+                <div className="space-y-2 border-t border-[#E5E5E7] pt-3">
                   <Label className="text-sm font-medium text-[#1D1D1F]">Cron 表达式</Label>
                   <Input
                     value={syncCron}
-                    onChange={(e) => {
-                      setSyncCron(e.target.value)
+                    onChange={(event) => {
+                      setSyncCron(event.target.value)
                       setCronError('')
                     }}
                     placeholder="0 2 * * *"
@@ -484,38 +597,38 @@ export default function DownloadPage() {
                     className={`h-10 border-[#E5E5E7] ${cronError ? 'border-red-500' : ''}`}
                   />
                   {cronError && <p className="text-xs text-red-500">{cronError}</p>}
-                  <div className="text-xs text-[#A1A1A6] space-y-1">
-                    <p>常用示例:</p>
+                  <div className="space-y-1 text-xs text-[#A1A1A6]">
+                    <p>常用示例：</p>
                     <p className="font-mono">0 2 * * * - 每天凌晨 2:00</p>
-                    <p className="font-mono">0 */6 * * * - 每 6 小时</p>
+                    <p className="font-mono">0 */6 * * * - 每 6 小时一次</p>
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          <DialogFooter className="h-[72px] flex items-center justify-end gap-3 px-6 border-t border-[#E5E5E7]">
+          <DialogFooter className="flex h-[72px] items-center justify-end gap-3 border-t border-[#E5E5E7] px-6">
             <Button
               variant="outline"
               onClick={() => setOpen(false)}
               disabled={loading}
-              className="h-10 px-5 border-[#E5E5E7]"
+              className="h-10 border-[#E5E5E7] px-5"
             >
               取消
             </Button>
             <Button
               onClick={handleSave}
               disabled={loading || !taskName.trim() || selectedUserIds.length === 0}
-              className="h-10 px-5 bg-[#0A84FF] hover:bg-[#0A84FF]/90 text-white"
+              className="h-10 bg-[#0A84FF] px-5 text-white hover:bg-[#0A84FF]/90"
             >
               {loading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   保存中...
                 </>
               ) : (
                 <>
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="mr-2 h-4 w-4" />
                   {editingTask ? '保存' : '创建'}
                 </>
               )}
